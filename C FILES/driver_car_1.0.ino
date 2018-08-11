@@ -17,25 +17,27 @@ class Driver {
     const byte MAX_ROTATE_ANGLE = 70;
     const byte D_SPEED = 50; // приращение к скорости
     const byte DELAY = 30; // задержка при изменении скорости
-    const byte SPEED_BOUNDS = 10; // рамки изменения скорости
-    const byte ANGLE_BOUNDS = 10; // рамки изменения угла поворота
     Servo servo;
     int currentSpeed;
     int currentAngle;
     bool currentForward;
 
   public:
-    Driver() {
+    void init(Servo serv) {
       currentAngle = 0;
       currentSpeed = 0;
+      digitalWrite(directionPort1, HIGH);
+      digitalWrite(directionPort2, LOW);
       currentForward = true;
-      servo.attach(rudderPort);
+      servo = serv;
+      rotate(50);
+      move(0);
     }
 
     /**
     * Постепенное изменение скорости чтобы не сжечь драйвер
     */
-    void smoothSpeedChange(byte speed) {
+    void smoothSpeedChange(int speed) {
       if (speed > currentSpeed) {
         for (int i = currentSpeed; i < speed; i += D_SPEED) {
           analogWrite(speedPort, i);
@@ -46,11 +48,9 @@ class Driver {
           analogWrite(speedPort, i);
           delay(DELAY);
         }
-
-        currentSpeed = speed;
       }
 
-      analogWrite(speedPort, currentSpeed);
+      currentSpeed = speed;
     }
 
     /**
@@ -58,57 +58,53 @@ class Driver {
     * @param speed принадлежит отрезку [-100; 100]
     */
     void move(int speed) {
-      byte newSpeed = speed == 0 ? 0 : (byte)((double)MAX_SPEED * ((double)abs(speed) / 100));// speed было в процентах, стало в единицах относительно MAX_SPEED
+      int newSpeed = speed == 0 ? 0 : (int)((double)MAX_SPEED * ((double)abs(speed) / 100));// speed было в процентах, стало в единицах относительно MAX_SPEED
+      
+      if (speed < 0 && currentForward || speed > 0 && !currentForward) {// если нужно поменять направление
+        smoothSpeedChange(0);
 
-      if (currentSpeed - SPEED_BOUNDS > newSpeed || newSpeed > currentSpeed + SPEED_BOUNDS) {//если нужно менять скорость
-        if (speed <= 0 && currentForward || speed >= 0 && !currentForward) {// если нужно поменять направление
-          smoothSpeedChange(0);
-
-          if (speed > 0) {
-            digitalWrite(directionPort1, HIGH);
-            digitalWrite(directionPort2, LOW);
-            currentForward = true;
-          } else {
-            digitalWrite(directionPort2, HIGH);
-            digitalWrite(directionPort1, LOW);
-            currentForward = false;
-          }
+        if (speed > 0) {
+          digitalWrite(directionPort1, HIGH);
+          digitalWrite(directionPort2, LOW);
+          currentForward = true;
+        } else {
+          digitalWrite(directionPort2, HIGH);
+          digitalWrite(directionPort1, LOW);
+          currentForward = false;
         }
-
-        smoothSpeedChange(newSpeed);
       }
-
+        
+      smoothSpeedChange(newSpeed);
       analogWrite(speedPort, currentSpeed);
     }
 
     /**
     * Поворот рулем
-    * @param angle принадлежит отрезку [-100; 100]
+    * @param angle принадлежит отрезку [0; 100]
     */
     void rotate(int angle) {
-      angle = angle == 0 ? 0 : (angle/abs(angle)) * (byte)((double)MAX_ROTATE_ANGLE * ((double)abs(angle) / 100));// speed было в процентах, стало в единицах относительно MAX_ROTATE_ANGLE
-
-      if (currentAngle - ANGLE_BOUNDS > angle || angle > currentAngle + ANGLE_BOUNDS) {//если нужно менять угол
-        currentAngle = angle;
-      }
-
+      angle = (90 - MAX_ROTATE_ANGLE) + ((double)(2*MAX_ROTATE_ANGLE) * ((double)angle / 100));
+      currentAngle = angle;
       servo.write(currentAngle);
     }
 
     void stop() {
-      rotate(0);
+      rotate(50);
       move(0);
-    }
+    }	
 };
 
 Driver driver;
+Servo servo;
 
 void setup() {
   pinMode(speedPort, OUTPUT);
   pinMode(directionPort1, OUTPUT);
   pinMode(directionPort2, OUTPUT);
   BTSerial.begin(9600);
-  driver.stop();
+  Serial.begin(9600);
+  servo.attach(rudderPort);
+  driver.init(servo);
 }
 
 void loop() {
@@ -129,9 +125,10 @@ void loop() {
       case 3://поворот налево
         driver.rotate(-BTSerial.read());
         break;
+		
+  	  case 4://стоп
+  		  driver.stop();
+  		break;
     }
-  } else {
-    driver.stop();
   }
- 
 }
