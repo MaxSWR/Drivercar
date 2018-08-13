@@ -16,7 +16,8 @@ class Driver {
     const byte MAX_SPEED = 255;
     const byte MAX_ROTATE_ANGLE = 70;
     const byte D_SPEED = 50; // приращение к скорости
-    const byte DELAY = 30; // задержка при изменении скорости
+    const byte DELAY = 30; // задержка при изменении скорости 
+    const byte START_ANGLE = 78; //значение, полученное при настроке
     Servo servo;
     int currentSpeed;
     int currentAngle;
@@ -58,6 +59,10 @@ class Driver {
     * @param speed принадлежит отрезку [-100; 100]
     */
     void move(int speed) {
+      if (speed < -100 || speed > 100) {
+        return;
+        }
+        
       int newSpeed = speed == 0 ? 0 : (int)((double)MAX_SPEED * ((double)abs(speed) / 100));// speed было в процентах, стало в единицах относительно MAX_SPEED
       
       if (speed < 0 && currentForward || speed > 0 && !currentForward) {// если нужно поменять направление
@@ -83,7 +88,10 @@ class Driver {
     * @param angle принадлежит отрезку [0; 100]
     */
     void rotate(int angle) {
-      angle = (90 - MAX_ROTATE_ANGLE) + ((double)(2*MAX_ROTATE_ANGLE) * ((double)angle / 100));
+      if (angle < 0 || angle > 100) {
+        return;
+        }
+      angle = (START_ANGLE - MAX_ROTATE_ANGLE) + ((double)(2*MAX_ROTATE_ANGLE) * ((double)angle / 100));
       currentAngle = angle;
       servo.write(currentAngle);
     }
@@ -105,28 +113,28 @@ void setup() {
   Serial.begin(9600);
   servo.attach(rudderPort);
   driver.init(servo);
+  Serial.begin(9600);
 }
 
 void loop() {
-  if (BTSerial.available()) {
-    switch (BTSerial.read()) {
+  if (BTSerial.available() == 2) {
+    byte first = BTSerial.read();
+    byte second = BTSerial.read();
+
+    switch (first) {
       case 0://движение вперед
-        driver.move(BTSerial.read());
+        driver.move(second);
         break;
 
        case 1://движение назад
-       driver.move(-BTSerial.read());
+       driver.move(-second);
         break;
 
-      case 2://поворот направо
-        driver.rotate(BTSerial.read());
-        break;
-
-      case 3://поворот налево
-        driver.rotate(-BTSerial.read());
+      case 2://поворот
+        driver.rotate(second);
         break;
 		
-  	  case 4://стоп
+  	  case 3://стоп
   		  driver.stop();
   		break;
     }
